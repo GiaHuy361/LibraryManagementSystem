@@ -1,0 +1,44 @@
+# Windows image file caches
+Thumbs.db
+ehthumbs.db
+
+# Folder config file
+Desktop.ini
+
+# Recycle Bin used on file shares
+$RECYCLE.BIN/
+
+# Mac OS X
+.DS_Store
+
+# User-specific files
+*.rsuser
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Build results
+[Dd]ebug/
+[Jj]unk/
+[Rr]elease/
+obj/
+bin/
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+*~.nib
+
+# VS Code
+.vscode/
+
+# IDE
+.idea/
+.vs/
+
+
+# Environment files
+appsettings.Development.json
+appsettings.Local.json

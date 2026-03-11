@@ -1,0 +1,93 @@
+========================================================================
+TÀI LIỆU BÁO CÁO CHI TIẾT KỸ THUẬT: HỆ THỐNG QUẢN LÝ THƯ VIỆN (LMS)
+(Dùng để báo cáo, phân chia công việc và trả lời câu hỏi vấn đáp)
+========================================================================
+
+--- THÔNG TIN CHUNG ---
+- Nền tảng: ASP.NET Core 8 Web API
+- Khung làm việc (Framework): Entity Framework Core (Code-First)
+- Hệ quản trị CSDL: SQL Server
+- Cơ chế bảo mật: JSON Web Token (JWT) & Bcrypt
+- Kiểm thử (Testing): xUnit & Moq
+- Cấu trúc: Clean Architecture (Kiến trúc Sạch)
+
+========================================================================
+PHẦN I. CẤU TRÚC PROJECT (SỰ PHÂN TẦNG VÀ LÝ DO)
+========================================================================
+Hệ thống được chia thành 4 Project chính. Đổi lại việc lúc đầu setup tốn công là code sau này CỰC KỲ dễ chia cho nhiều người làm chung. Không ai giẫm chân ai. 
+Bạn hãy mở file Solution lên, sẽ thấy 4 Project như sau:
+
+1. Tầng LMS.Domain (Không phụ thuộc Framework nào)
+- Nằm ở Thư mục: src/LMS.Domain
+- Mục đích: Trái tim của hệ thống. Chứa các class biểu diễn thực thể.
+- File tiêu biểu: 
+   + Entities/BorrowRecord.cs: Chứa cấu trúc phiếu Mượn.
+   + Entities/Book.cs: Chứa cấu trúc Sách.
+   + Interfaces/IRepository.cs: Chứa quy tắc "Tôi cần mượn data từ DB nhưng tôi chưa biết dùng DB loại nào (SQL, MongoDB...)".
+- LÝ DO CHIA RA: Để logic cốt lõi không bao giờ bị ảnh hưởng nếu sau này đổi thư viện. Tương lai sang năm nhóm thích đổi SQL Server thành MySQL thì Domain này vẫn giữ nguyên 100%.
+
+2. Tầng LMS.Application (Tầng xử lý dữ liệu)
+- Nằm ở: src/LMS.Application
+- Mục đích: Nơi chứa toàn bộ LOGIC XỬ LÝ hệ thống (Làm sao mượn sách? Trả sách quá hạn thì gọi hàm nào phạt?).
+- Thư mục DTOs (Data Transfer Object): Khi Frontend gửi dữ liệu tạo Sách Mới lên, ta KHÔNG lấy cái File Book.cs đưa cho họ xem (bảo mật), ta tạo class CreateBookDto.cs chỉ chứa Title, Isbn... để nhận dữ liệu thôi.
+- Thư mục Services: Chứa các file như BorrowService.cs đóng vai trò xử lý quy trình: 1. check sách kho, 2. xuất phiếu mượn, 3. cập nhật ngày.
+
+3. Tầng LMS.Infrastructure (Tầng thi công thật)
+- Nằm ở: src/LMS.Infrastructure
+- Mục đích: Tầng này cài đặt (install) Entity Framework Core. Nó lấy các thực thể ở Domain và chuyển thành bảng (Table) trong SQL Server SQL.
+- Data/Configurations/EntityConfigurations.cs: Quy định Book table cấu trúc varchar thế nào, Unique ra sao... Khai báo Data mẫu (Seed).
+- Mật khẩu: Chức năng BcryptPasswordHasher NẰM Ở ĐÂY. Bcrypt là chuẩn Hash mạnh nhất nhì thế giới hiện nay, vượt trội hơn MD5 hay SHA-256 rất nhiều do có Salt random liên tục mỗi lần Hash, chống "Dò bảng cầu vồng rainbow table".
+
+4. Tầng LMS.API (Cửa Ngõ)
+- Nằm ở: src/LMS.API
+- Mục đích: Nơi giao tiếp với React/Frontend. File Controllers/BooksController nhận Request (GET, POST), gọi Application để lấy Data, và trả về Response JSON. Nơi chứa cấu hình khởi tạo chung (Program.cs).
+
+========================================================================
+PHẦN II. CÁC TÍNH NĂNG CHI TIẾT & LOGIC SAU LƯNG (Đọc kỹ để vấn đáp)
+========================================================================
+
+1. MODULE BẢO MẬT & PHÂN QUYỀN (Auth & Users)
+- Tính năng: Đăng ký/Tạo mới thành viên, Gán Role, Đăng nhập.
+- Giải thích vấn đáp:
+  + "Mật khẩu Admin lưu trong DB là gì? Cấu trúc ra sao?": Nhóm em băm mật khẩu bằng Bcrypt. Hệ thống chỉ lưu chuỗi băm, ví dụ "$2a$11$M4.5zL9...". Hacker trộm DB cũng không dịch ngược ra được chữ "Admin@123".
+  + JWT: Đăng nhập thành công, Server không gửi Session Cookie mà là gửi một chuỗi JWT Token. Token này sống 8 tiếng, chứa thông tin là "Tao là Admin". Lần sau gọi API, Frontend kẹp cái Token này vào mục "Authorization: Bearer..." để đi qua trạm kiểm soát.
+  + Nếu bị hỏi: "Nhỡ người ta sửa chữ Role trong Token từ Member thành Admin để hack thì sao?": Trả lời: "JWT có chữ ký điện tử (Signature) dùng khóa Bí mật SecretKey ở appsettings.json. Nếu đối tượng sửa 1 ký tự, Token mất tính toàn vẹn và bị API từ chối cấm cửa - Lỗi 401 Unauthorized ngay!".
+
+2. MODULE QUẢN LÝ SÁCH VÀ MỐI QUAN HỆ NHIỀU-NHIỀU (Book & Authors)
+- 1 Cuốn sách có thể có nhiều tác giả (Ví dụ truyện được đồng sáng tác bởi tác giả A và B). Giải quyết thế nào?
+- Trả lời: Tụi em ứng dụng bảng trung gian (Junction Table) tên là "BookAuthor". Một Book có List<BookAuthor>, Author có List<BookAuthor>. EF Core sẽ tự hiểu và thiết lập mối quan hệ N-N trong CSDL.
+- Khi tạo Book mới: DTO nhận mảng authorIds: [1, 2]. Service sẽ dệt mảng đó thành các đối tượng BookAuthor.
+
+3. MODULE CHÍNH: MƯỢN TRẢ SÁCH (Borrow Service)
+- Issue Borrow (Cho Mượn sách): 
+  + B1: Hệ thống truy vấn xem Member ID có hợp lệ hay chưa, thủ thư (Librarian) đang thực hiện là ai?
+  + B2: Hệ thống truy vấn Sách. Kiểm tra cột Quantity (Số lượng khả dụng). MƯỢN ĐƯỢC chỉ khi Quantity > 0.
+  + B3: Nếu mượn xong: (Quantity - 1). Ghi nhận ngày IssueDate và lập DueDate (Ngày hẹn trả). Tất cả gói vào 1 Transaction. Nếu 1 bước fail, toàn bộ hủy bỏ (Unit of Work lo chuyện này).
+- Trả Sách (Return Book):
+  + Tăng lại số lượng sách sẵn có (+1).
+  + Kiểm tra Date Now so với DueDate. Nếu bị trễ, chuyển luồng qua FineService tính phạt.
+
+4. DESIGN PATTERN ĐƯỢC SỬ DỤNG - STRATEGY PATTERN 
+- Câu hỏi Vấn đáp tiềm năng: Tại sao lại dùng Design Pattern trong code? Em dùng ở đâu?
+- Trả lời: Tụi em xài Strategy Pattern cho Hệ Thống Tính Phí Phạt (Overdue Fines).
+  + Lý do: Tương lai chưa rõ Thư Viện sẽ quy định phạt như thế nào. Hiện tại phạt x nghìn/ngày, nhưng mai mốt có thể phạt cấp số nhân lũy tiến (5 ngày đầu phạt rẻ, từ ngày 6 phạt đắt vút lên). 
+  + Giải pháp Code: Tụi em tạo 1 Interface "IFineCalculationStrategy". Trong đó có 1 class là "DailyFineStrategy" kế thừa nó và hiện thực hóa công thức Phạt x Ngày. Sau này em tạo thêm class "ProgressiveFineStrategy" viết code riêng. Lúc muốn dùng, em đứng ở file Program.cs đổi đúng cấu hình DI (Dependency Injection), toàn bộ thư viện đổi chính sách ngay và luôn, không cần đào sâu sửa Code cũ!
+
+5. GLOBAL EXCEPTION MIDDLEWARE - CƠ CHẾ BẮT LỖI SIÊU VIỆT
+- Trong mọi dự án phổ thông, Sinh viên sẽ chèn "Try {} Catch (Exception ex){}" ở tít tắp mọi Controller, file nào cũng phải try..catch, code phình to rất xấu xí.
+- Ở LMS Api, chúng ta KHÔNG DÙNG 1 CHỮ TRY CATCH NÀO Ở CONTROLLER. API chỉ có đúng 3 dòng gọi hàm. 
+- Tại sao? Vì ta đã cài đặt Middleware (Kiểm duyệt viên ở cổng vào). Bất kỳ ở sâu bên trong Database, Service bị văng lỗi (Crash, NotFound..), nó chạy bật ra gặp anh Kiểm duyệt viên này. Anh này chặn lại, dập lỗi server, đóng gói biến nó thành 1 file báo cáo Lỗi định dạng JSON chuẩn quốc tế (RFC-7807), trả về cho React Frontend với mã Status 400 hoặc 500 lịch sự tuyệt đối. Server không sụp. Chấm hết!
+
+========================================================================
+PHẦN III. QUALITY ASSURANCE (ĐẢM BẢO CHẤT LƯỢNG)
+========================================================================
+1. Unit Tests 
+- Thư mục "tests/LMS.Application.Tests". Trong này dùng xUnit Framework để viết test case kịch bản thực tế.
+- Sử dụng công nghệ Moq (Mock): Nghĩa là khi Test tính năng Auth đăng nhập, ta chặn không cho nó chọc thẳng xuống Database thật (việc lôi DB thật để Test là sai chuẩn Unit Test). Thay vào đó, ta Mô phỏng (Mock) Reposity: "Giả lập tao gọi mày thì mày ói ra cục User này nhé!".
+- Giúp test thuật toán Mật Khẩu, Check Sách Số Lượng siêu nhanh trong 1 giây mà hoàn toàn khép kín ko xài CSDL vật lý. PASS TOÀN BỘ 24/24 KỊCH BẢN. 
+
+2. Auto Seeding và Migrations:
+- Project khi Run sẽ kiểm tra cờ (Migration Tracker), nếu Database trống trơn -> Tự nó tạo Database -> Tự tạo bảng SQL -> tự Insert tài khoản. 
+- Tiết kiệm 100% sức lực cho Coder tải SourceCode máy khác và Thầy cô khi test.
+
+======================= KẾT THÚC BÁO CÁO ===============================

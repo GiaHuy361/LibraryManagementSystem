@@ -1,0 +1,3 @@
+SET ARITHABORT ON;
+SET QUOTED_IDENTIFIER ON;
+UPDATE users SET password_hash = '$2a$11$M4.5zL9l6TXovQL/nx8OWeJFvAC6KGjucghuGRfxex57AZf17o3ZO' WHERE username = 'admin';
